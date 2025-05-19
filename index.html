@@ -40,6 +40,65 @@
             float: right;
         }
         
+        /* Pause button in UI */
+        #pauseBtn {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 255, 0.3);
+            color: #0ff;
+            border: 2px solid #0ff;
+            padding: 5px 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 100;
+        }
+        
+        #pauseBtn:hover {
+            background: rgba(0, 255, 255, 0.5);
+        }
+        
+        /* Pause Menu */
+        #pauseMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #0ff;
+            padding: 30px;
+            text-align: center;
+            font-size: 20px;
+            border: 2px solid #0ff;
+            display: none;
+            z-index: 1000;
+            width: 300px;
+        }
+        
+        #pauseMenu h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        
+        #pauseMenu button {
+            background: #0ff;
+            color: #000;
+            border: none;
+            padding: 10px 30px;
+            margin: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            cursor: pointer;
+            width: 80%;
+        }
+        
+        #pauseMenu button:hover {
+            background: #00cccc;
+        }
+        
         #gameOver {
             position: absolute;
             top: 50%;
@@ -52,6 +111,7 @@
             font-size: 20px;
             border: 2px solid #0ff;
             display: none;
+            z-index: 1000;
         }
         
         #startScreen {
@@ -102,9 +162,16 @@
     <div id="ui">
         <div id="score">SCORE: 0</div>
         <div id="wave">WAVE: 1/10</div>
+        <button id="pauseBtn">PAUSE</button>
     </div>
     
     <canvas id="gameCanvas"></canvas>
+    
+    <div id="pauseMenu">
+        <h2>GAME PAUSED</h2>
+        <button id="resumeBtn">RESUME GAME</button>
+        <button id="restartBtn">RESTART GAME</button>
+    </div>
     
     <div id="gameOver">
         <h2>GAME OVER</h2>
@@ -118,10 +185,20 @@
         const startScreen = document.getElementById('startScreen');
         const startButton = document.getElementById('startButton');
         const gameOverScreen = document.getElementById('gameOver');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const restartBtn = document.getElementById('restartBtn');
         
         // Set canvas size
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        
+        // Player image assets
+        let playerImages = [];
+        let playerAnimationFrame = 0;
+        let playerAnimationTimer = 0;
+        const playerAnimationSpeed = 5; // Frames between animation updates
         
         // Game variables
         let gameState = 'start';
@@ -129,6 +206,7 @@
         let wave = 1;
         let enemies = [];
         let bullets = [];
+        let enemyBullets = []; // Array for enemy bullets
         let particles = [];
         let powerUps = [];
         let enemySpeed = 2;
@@ -136,13 +214,15 @@
         let waveEnemies = 10;
         let enemiesSpawned = 0;
         let enemiesKilled = 0;
+        let enemiesMissed = 0; // Track missed enemies
+        let isPaused = false;
         
         // Player object
         const player = {
             x: canvas.width / 2,
             y: canvas.height - 100,
-            width: 40,
-            height: 40,
+            width: 60, // Increased size for better drone display
+            height: 60, // Increased size for better drone display
             speed: 8,
             fireRate: 10,
             fireTimer: 0,
@@ -154,6 +234,35 @@
         let touchY = player.y;
         let isTouching = false;
         
+        // Load game images
+        function loadImages() {
+            return new Promise((resolve, reject) => {
+                const imageFiles = [
+                    'art/player_drone_1.png',
+                    'art/player_drone_2.png'
+                ];
+                
+                let loadedCount = 0;
+                playerImages = new Array(imageFiles.length);
+                
+                imageFiles.forEach((src, index) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        playerImages[index] = img;
+                        loadedCount++;
+                        if (loadedCount === imageFiles.length) {
+                            resolve();
+                        }
+                    };
+                    img.onerror = () => {
+                        console.error(`Failed to load image: ${src}`);
+                        reject(new Error(`Failed to load image: ${src}`));
+                    };
+                    img.src = src;
+                });
+            });
+        }
+        
         // Enemy constructor
         class Enemy {
             constructor(x, y) {
@@ -163,10 +272,24 @@
                 this.height = 30;
                 this.speed = enemySpeed + Math.random() * 2;
                 this.health = 1;
+                this.fireTimer = Math.floor(Math.random() * 150) + 50; // Random initial timer
+                this.fireRate = Math.floor(Math.random() * 150) + 100; // Random fire rate
             }
             
             update() {
                 this.y += this.speed;
+                
+                // Enemy firing logic
+                if (gameState === 'playing' && !isPaused) {
+                    this.fireTimer--;
+                    if (this.fireTimer <= 0) {
+                        // Only fire if on screen
+                        if (this.y > 0 && this.y < canvas.height) {
+                            enemyBullets.push(new EnemyBullet(this.x, this.y + 15));
+                        }
+                        this.fireTimer = this.fireRate;
+                    }
+                }
             }
             
             draw() {
@@ -199,6 +322,27 @@
             }
         }
         
+        // Enemy Bullet constructor
+        class EnemyBullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 4;
+                this.height = 12;
+                this.speed = 7; // Slightly slower than player bullets
+                this.color = '#f00'; // Red color to distinguish from player bullets
+            }
+            
+            update() {
+                this.y += this.speed; // Enemy bullets move downward
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+            }
+        }
+        
         // Particle constructor (for explosions)
         class Particle {
             constructor(x, y, color) {
@@ -223,6 +367,16 @@
                 ctx.globalAlpha = this.life;
                 ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
                 ctx.globalAlpha = 1;
+            }
+        }
+        
+        // Pause/Resume Game
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseMenu.style.display = 'block';
+            } else {
+                pauseMenu.style.display = 'none';
             }
         }
         
@@ -274,11 +428,57 @@
             isTouching = false;
         });
         
+        // Keyboard support
+        window.addEventListener('keydown', (e) => {
+            // Space bar to pause/resume
+            if (e.code === 'Space' && gameState === 'playing') {
+                togglePause();
+            }
+        });
+        
+        // Pause button
+        pauseBtn.addEventListener('click', () => {
+            if (gameState === 'playing') {
+                togglePause();
+            }
+        });
+        
+        // Resume button
+        resumeBtn.addEventListener('click', () => {
+            togglePause(); // This will unpause the game
+        });
+        
+        // Restart button
+        restartBtn.addEventListener('click', () => {
+            pauseMenu.style.display = 'none';
+            isPaused = false;
+            restartGame();
+        });
+        
         // Start button
         startButton.addEventListener('click', () => {
             startScreen.style.display = 'none';
-            gameState = 'playing';
-            gameLoop();
+            
+            // Show loading message
+            const loadingMessage = document.createElement('div');
+            loadingMessage.style.position = 'absolute';
+            loadingMessage.style.top = '50%';
+            loadingMessage.style.left = '50%';
+            loadingMessage.style.transform = 'translate(-50%, -50%)';
+            loadingMessage.style.color = '#0ff';
+            loadingMessage.style.fontSize = '24px';
+            loadingMessage.textContent = 'LOADING...';
+            document.body.appendChild(loadingMessage);
+            
+            // Load images then start game
+            loadImages().then(() => {
+                document.body.removeChild(loadingMessage);
+                gameState = 'playing';
+                gameLoop();
+            }).catch(error => {
+                console.error('Error loading game assets:', error);
+                loadingMessage.textContent = 'ERROR LOADING ASSETS. REFRESH TO TRY AGAIN.';
+            });
         });
         
         // Game functions
@@ -299,6 +499,13 @@
             if (player.fireTimer <= 0) {
                 fireBullet();
                 player.fireTimer = player.fireRate;
+            }
+            
+            // Update animation
+            playerAnimationTimer++;
+            if (playerAnimationTimer >= playerAnimationSpeed) {
+                playerAnimationTimer = 0;
+                playerAnimationFrame = (playerAnimationFrame + 1) % playerImages.length;
             }
         }
         
@@ -333,7 +540,7 @@
         
         function updateEnemies() {
             // Spawn enemies for current wave
-            if (enemiesSpawned < waveEnemies && gameState === 'playing') {
+            if (enemiesSpawned < waveEnemies && gameState === 'playing' && !isPaused) {
                 enemySpawnTimer--;
                 if (enemySpawnTimer <= 0) {
                     spawnEnemy();
@@ -344,11 +551,29 @@
             // Update enemies
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
-                enemy.update();
+                if (!isPaused) enemy.update();
                 
-                // Remove enemies that go off screen
+                // Check if enemies go off screen
                 if (enemy.y > canvas.height + 50) {
+                    // Count as missed enemy instead of just removing
                     enemies.splice(i, 1);
+                    enemiesMissed++;
+                    
+                    // Apply small score penalty
+                    score = Math.max(0, score - 50); // Don't go below zero
+                    updateUI();
+                    
+                    // Create red particle effect for missed enemy
+                    for (let k = 0; k < 5; k++) {
+                        particles.push(new Particle(enemy.x, canvas.height, '#f00'));
+                    }
+                    
+                    // Check if wave is complete (killed + missed = total spawned)
+                    if (enemiesKilled + enemiesMissed >= waveEnemies) {
+                        nextWave();
+                    }
+                    
+                    continue;
                 }
                 
                 // Check collision with player
@@ -361,10 +586,11 @@
         function updateBullets() {
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const bullet = bullets[i];
-                bullet.update();
+                if (!isPaused) bullet.update();
                 
-                // Remove bullets that go off screen
-                if (bullet.y < -10 || bullet.x < 0 || bullet.x > canvas.width) {
+                // Remove bullets that go off screen (improved boundary check)
+                if (bullet.y < -10 || bullet.y > canvas.height + 10 || 
+                    bullet.x < -10 || bullet.x > canvas.width + 10) {
                     bullets.splice(i, 1);
                     continue;
                 }
@@ -384,7 +610,7 @@
                         enemiesKilled++;
                         
                         // Check if wave is complete
-                        if (enemiesKilled >= waveEnemies) {
+                        if (enemiesKilled + enemiesMissed >= waveEnemies) {
                             nextWave();
                         }
                         break;
@@ -393,10 +619,36 @@
             }
         }
         
+        function updateEnemyBullets() {
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                if (!isPaused) bullet.update();
+                
+                // Remove bullets that go off screen (improved boundary check)
+                if (bullet.y < -10 || bullet.y > canvas.height + 10 || 
+                    bullet.x < -10 || bullet.x > canvas.width + 10) {
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(bullet, player)) {
+                    // Create player explosion effect
+                    for (let k = 0; k < 20; k++) {
+                        particles.push(new Particle(player.x, player.y, '#0ff'));
+                    }
+                    
+                    enemyBullets.splice(i, 1);
+                    gameOver();
+                    break;
+                }
+            }
+        }
+        
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
                 const particle = particles[i];
-                particle.update();
+                if (!isPaused) particle.update();
                 
                 if (particle.life <= 0 || particle.size <= 0.1) {
                     particles.splice(i, 1);
@@ -424,6 +676,7 @@
             } else {
                 enemiesSpawned = 0;
                 enemiesKilled = 0;
+                enemiesMissed = 0; // Reset missed enemies count for new wave
                 waveEnemies = 10 + (wave * 2);
                 enemySpeed += 0.5;
                 player.powerLevel++;
@@ -442,7 +695,9 @@
                         ctx.fillText(this.text, this.x, this.y);
                         ctx.globalAlpha = 1;
                     },
-                    update: function() { this.life--; }
+                    update: function() { 
+                        if (!isPaused) this.life--; 
+                    }
                 });
             }
             updateUI();
@@ -459,16 +714,20 @@
             wave = 1;
             enemies = [];
             bullets = [];
+            enemyBullets = []; // Clear enemy bullets
             particles = [];
             player.x = canvas.width / 2;
             player.y = canvas.height - 100;
             player.powerLevel = 1;
             enemiesSpawned = 0;
             enemiesKilled = 0;
+            enemiesMissed = 0; // Reset missed enemies count
             waveEnemies = 10;
             enemySpeed = 2;
             gameState = 'playing';
+            isPaused = false;
             gameOverScreen.style.display = 'none';
+            pauseMenu.style.display = 'none';
             updateUI();
         }
         
@@ -498,27 +757,55 @@
             // Draw game objects
             enemies.forEach(enemy => enemy.draw());
             bullets.forEach(bullet => bullet.draw());
+            enemyBullets.forEach(bullet => bullet.draw()); // Draw enemy bullets
             particles.forEach(particle => particle.draw());
             
-            // Draw player
-            ctx.fillStyle = '#0f0';
-            ctx.fillRect(player.x - player.width/2, player.y - player.height/2, player.width, player.height);
-            ctx.strokeStyle = '#0ff';
-            ctx.strokeRect(player.x - player.width/2, player.y - player.height/2, player.width, player.height);
+            // Draw player - now using drone images
+            if (playerImages.length > 0 && playerAnimationFrame < playerImages.length) {
+                const currentFrame = playerImages[playerAnimationFrame];
+                ctx.drawImage(
+                    currentFrame,
+                    player.x - player.width/2,
+                    player.y - player.height/2,
+                    player.width,
+                    player.height
+                );
+            } else {
+                // Fallback to original square if images failed to load
+                ctx.fillStyle = '#0f0';
+                ctx.fillRect(player.x - player.width/2, player.y - player.height/2, player.width, player.height);
+                ctx.strokeStyle = '#0ff';
+                ctx.strokeRect(player.x - player.width/2, player.y - player.height/2, player.width, player.height);
+                
+                // Draw player ship details
+                ctx.fillStyle = '#0ff';
+                ctx.fillRect(player.x - 3, player.y - player.height/2 - 10, 6, 10);
+                ctx.fillRect(player.x - 15, player.y + 5, 10, 6);
+                ctx.fillRect(player.x + 5, player.y + 5, 10, 6);
+            }
             
-            // Draw player ship details
-            ctx.fillStyle = '#0ff';
-            ctx.fillRect(player.x - 3, player.y - player.height/2 - 10, 6, 10);
-            ctx.fillRect(player.x - 15, player.y + 5, 10, 6);
-            ctx.fillRect(player.x + 5, player.y + 5, 10, 6);
+            // Draw "PAUSED" text overlay when game is paused
+            if (isPaused && gameState === 'playing' && pauseMenu.style.display !== 'block') {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#0ff';
+                ctx.font = '40px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+                ctx.font = '20px Courier New';
+                ctx.fillText('Press SPACE to resume', canvas.width / 2, canvas.height / 2 + 50);
+            }
         }
         
         function gameLoop() {
             if (gameState === 'playing') {
-                updatePlayer();
-                updateEnemies();
-                updateBullets();
-                updateParticles();
+                if (!isPaused) {
+                    updatePlayer();
+                    updateEnemies();
+                    updateBullets();
+                    updateEnemyBullets();
+                }
+                updateParticles(); // Always update particles for smooth animations
                 updateUI();
             }
             
