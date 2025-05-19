@@ -194,25 +194,6 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         
-        // Add scaling factor to adjust speeds based on screen size
-        function getScaleFactor() {
-            // Reference size (typical desktop)
-            const referenceWidth = 1366;
-            const referenceHeight = 768;
-            
-            // Calculate ratio of actual to reference
-            const widthRatio = window.innerWidth / referenceWidth;
-            const heightRatio = window.innerHeight / referenceHeight;
-            
-            // Use the smaller ratio to ensure everything fits
-            return Math.min(widthRatio, heightRatio);
-        }
-
-        // Calculate and store the scale factor
-        const scaleFactor = getScaleFactor();
-        console.log("Screen size:", window.innerWidth, "x", window.innerHeight);
-        console.log("Scale factor:", scaleFactor.toFixed(3));
-        
         // Player image assets
         let playerImages = [];
         let playerAnimationFrame = 0;
@@ -228,7 +209,7 @@
         let enemyBullets = []; // Array for enemy bullets
         let particles = [];
         let powerUps = [];
-        let enemySpeed = 2 * scaleFactor; // Apply scaling to base enemy speed
+        let enemySpeed = 2;
         let enemySpawnTimer = 0;
         let waveEnemies = 10;
         let enemiesSpawned = 0;
@@ -242,8 +223,8 @@
             y: canvas.height - 100,
             width: 60, // Increased size for better drone display
             height: 60, // Increased size for better drone display
-            speed: 8 * scaleFactor, // Apply scaling to player speed
-            fireRate: 10, 
+            speed: 8,
+            fireRate: 10,
             fireTimer: 0,
             powerLevel: 1
         };
@@ -289,7 +270,7 @@
                 this.y = y;
                 this.width = 30;
                 this.height = 30;
-                this.speed = (enemySpeed + Math.random() * 2 * scaleFactor); // Apply scaling to random component too
+                this.speed = enemySpeed + Math.random() * 2;
                 this.health = 1;
                 this.fireTimer = Math.floor(Math.random() * 150) + 50; // Random initial timer
                 this.fireRate = Math.floor(Math.random() * 150) + 100; // Random fire rate
@@ -326,7 +307,7 @@
                 this.y = y;
                 this.width = 4;
                 this.height = 12;
-                this.speed = 15 * scaleFactor; // Apply scaling to bullet speed
+                this.speed = 15;
                 this.angle = angle;
             }
             
@@ -348,7 +329,7 @@
                 this.y = y;
                 this.width = 4;
                 this.height = 12;
-                this.speed = 7 * scaleFactor; // Apply scaling to enemy bullet speed
+                this.speed = 7; // Slightly slower than player bullets
                 this.color = '#f00'; // Red color to distinguish from player bullets
             }
             
@@ -367,8 +348,8 @@
             constructor(x, y, color) {
                 this.x = x;
                 this.y = y;
-                this.vx = (Math.random() - 0.5) * 10 * scaleFactor; // Scale particle velocity
-                this.vy = (Math.random() - 0.5) * 10 * scaleFactor;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
                 this.size = Math.random() * 4 + 2;
                 this.life = 1;
                 this.color = color;
@@ -505,8 +486,8 @@
             if (isTouching) {
                 const dx = touchX - player.x;
                 const dy = touchY - player.y;
-                player.x += dx * (0.1 * scaleFactor); // Apply scaling to player movement
-                player.y += dy * (0.1 * scaleFactor);
+                player.x += dx * 0.1;
+                player.y += dy * 0.1;
             }
             
             // Keep player on screen
@@ -697,7 +678,7 @@
                 enemiesKilled = 0;
                 enemiesMissed = 0; // Reset missed enemies count for new wave
                 waveEnemies = 10 + (wave * 2);
-                enemySpeed += 0.5 * scaleFactor; // Scale the speed increase too
+                enemySpeed += 0.5;
                 player.powerLevel++;
                 
                 // Show wave announcement
@@ -742,7 +723,7 @@
             enemiesKilled = 0;
             enemiesMissed = 0; // Reset missed enemies count
             waveEnemies = 10;
-            enemySpeed = 2 * scaleFactor; // Reset with scaling applied
+            enemySpeed = 2;
             gameState = 'playing';
             isPaused = false;
             gameOverScreen.style.display = 'none';
@@ -834,17 +815,8 @@
         
         // Handle window resize
         window.addEventListener('resize', () => {
-            // Recalculate canvas dimensions
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
-            // Recalculate scale factor since screen size changed
-            const newScaleFactor = getScaleFactor();
-            console.log("Window resized. New scale factor:", newScaleFactor.toFixed(3));
-            
-            // Optional: update game speeds with new scale factor
-            // This is a design choice - either keep old scaling or update to new scaling
-            // For simplicity, we're keeping the old scaling until game restart
         });
     </script>
 </body>
